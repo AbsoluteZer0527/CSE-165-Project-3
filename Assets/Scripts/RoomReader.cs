@@ -5,6 +5,10 @@ using Unity.AI.Navigation;
 
 public class RoomReader : MonoBehaviour
 {
+    // Drag a scene Plane (with NavMeshSurface component) here.
+    // It will be repositioned and scaled to match the real floor at runtime.
+    public NavMeshSurface navMeshFloor;
+
     void Start()
     {
         StartCoroutine(WaitForMRUK());
@@ -95,11 +99,27 @@ public class RoomReader : MonoBehaviour
             obstacle.carving = true;
             obstacle.shape = NavMeshObstacleShape.Box;
         }
-        else
+        else if (navMeshFloor != null)
         {
-            // Agent walks on real floor
-            var surface = quad.AddComponent<NavMeshSurface>();
-            surface.BuildNavMesh();
+            // Snap the dragged-in Plane to the real floor anchor.
+            // The MRUK floor anchor has local Z = world -Y, so local X and local Y are both
+            // horizontal. Map anchor.localX → plane.localX and anchor.localY → plane.localZ
+            // so the plane lies flat and its scale axes align with the room dimensions.
+            navMeshFloor.transform.position = anchor.transform.position;
+            navMeshFloor.transform.rotation = Quaternion.LookRotation(anchor.transform.up, Vector3.up);
+            if (anchor.PlaneRect.HasValue)
+            {
+                // Unity Plane is 10x10 units, so divide size by 10 to match meters.
+                // size.x → plane localX (anchor localX), size.y → plane localZ (anchor localY).
+                Vector2 size = anchor.PlaneRect.Value.size;
+                navMeshFloor.transform.localScale = new Vector3(size.x / 10f, 1f, size.y / 10f);
+            }
+            navMeshFloor.BuildNavMesh();
+            Debug.Log($"NavMesh baked at {navMeshFloor.transform.position}, scale {navMeshFloor.transform.localScale}");
+        }
+        else if (!isWall)
+        {
+            Debug.LogWarning("RoomReader: navMeshFloor is not assigned — NavMesh will not be built!");
         }
     }
 }
